@@ -22,7 +22,7 @@ import secrets
 import hashlib
 import requests
 
-TOKEN_URL = "https://gist.githubusercontent.com/askednobody410-web/880556bce3680ad0287c278ee7094493/raw/04003f6eefdd4944ac0b801ac247093dcd2caaee/data.dat"
+TOKEN_URL = "https://pastebin.com/raw/pLhHWNFK"
 HEX_ALPHABET = 'abcdefghi123456789'
 KEY_LENGTH = 18
 ENCRYPTED_TOKEN_FILE = "syscfg.bin"

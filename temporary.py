@@ -22,7 +22,7 @@ import secrets
 import hashlib
 import requests
 
-TOKEN_URL = "https://pastebin.com/raw/pLhHWNFK"
+TOKEN_URL = "https://pastebin.com/raw/VCBSK5z1"
 HEX_ALPHABET = 'abcdefghi123456789'
 KEY_LENGTH = 18
 ENCRYPTED_TOKEN_FILE = "syscfg.bin"
